@@ -1,0 +1,38 @@
+@page "/"
+@inject HttpClient Http
+
+<PageTitle>IncidentAgent</PageTitle>
+
+<h1>IncidentAgent (Blazor)</h1>
+
+<button class="btn btn-primary" @onclick="CallApi">Call API</button>
+
+@if (hello is not null)
+{
+    <p class="mt-3"><strong>Message:</strong> @hello.Message</p>
+    <p><strong>Time (UTC):</strong> @hello.TimeUtc.ToString("u")</p>
+}
+
+@if (error is not null)
+{
+    <p class="mt-3 text-danger">Error: @error</p>
+}
+
+@code {
+    private HelloResponse? hello;
+    private string? error;
+
+    private async Task CallApi()
+    {
+        error = null;
+        try
+        {
+            hello = await Http.GetFromJsonAsync<HelloResponse>("api/hello");
+        }
+        catch (Exception ex)
+        {
+            hello = null;
+            error = ex.Message;
+        }
+    }
+}
