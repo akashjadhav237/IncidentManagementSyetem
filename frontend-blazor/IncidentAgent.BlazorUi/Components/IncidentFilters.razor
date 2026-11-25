@@ -1,0 +1,119 @@
+@implements IDisposable
+
+<div class="filters" role="search" aria-label="Filter incidents">
+    <div class="field field-search">
+        <label for="filter-search">Search</label>
+        <input id="filter-search" type="search" placeholder="Incident number or title" autocomplete="off"
+               value="@searchText" @oninput="OnSearchInput" />
+    </div>
+
+    <div class="field">
+        <label for="filter-status">Status</label>
+        <select id="filter-status" value="@(Status ?? "")" @onchange="e => EmitAsync(Current() with { Status = Value(e) })">
+            <option value="">All statuses</option>
+            @foreach (var status in Display.Statuses)
+            {
+                <option value="@status">@status</option>
+            }
+        </select>
+    </div>
+
+    <div class="field">
+        <label for="filter-priority">Priority</label>
+        <select id="filter-priority" value="@(Priority ?? "")" @onchange="e => EmitAsync(Current() with { Priority = Value(e) })">
+            <option value="">All priorities</option>
+            @foreach (var priority in Display.Priorities)
+            {
+                <option value="@priority">@Display.PriorityLabel(priority)</option>
+            }
+        </select>
+    </div>
+
+    <div class="field">
+        <label for="filter-category">Category</label>
+        <select id="filter-category" value="@(CategoryId?.ToString() ?? "")" @onchange="e => EmitAsync(Current() with { CategoryId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null })">
+            <option value="">All categories</option>
+            @foreach (var category in Categories)
+            {
+                <option value="@category.Id">@category.Name</option>
+            }
+        </select>
+    </div>
+
+    <div class="field field-action">
+        <button type="button" class="button button-secondary" disabled="@(!HasFilters)" @onclick="ClearAsync">Clear filters</button>
+    </div>
+</div>
+
+@code {
+    private const int DebounceMilliseconds = 400;
+
+    [Parameter] public string? Search { get; set; }
+    [Parameter] public string? Status { get; set; }
+    [Parameter] public string? Priority { get; set; }
+    [Parameter] public Guid? CategoryId { get; set; }
+    [Parameter] public IReadOnlyList<Category> Categories { get; set; } = [];
+    [Parameter] public EventCallback<IncidentFilterValues> OnChange { get; set; }
+    [Parameter] public EventCallback OnClear { get; set; }
+
+    private string? searchText;
+    private string? lastSearchParameter;
+    private CancellationTokenSource? debounceCts;
+
+    private bool HasFilters => !string.IsNullOrWhiteSpace(searchText) || Status is not null || Priority is not null || CategoryId is not null;
+
+    protected override void OnParametersSet()
+    {
+        // Only take the search value from the URL when it changed from outside (e.g. top bar search, Clear),
+        // so typing is never overwritten.
+        if (Search != lastSearchParameter)
+        {
+            searchText = Search;
+            lastSearchParameter = Search;
+        }
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString();
+        debounceCts?.Cancel();
+        debounceCts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(DebounceMilliseconds, debounceCts.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+        await EmitAsync(Current());
+    }
+
+    private string? SearchValue => string.IsNullOrWhiteSpace(searchText) ? null : searchText.Trim();
+
+    private IncidentFilterValues Current() => new(SearchValue, Status, Priority, CategoryId);
+
+    private Task EmitAsync(IncidentFilterValues values)
+    {
+        debounceCts?.Cancel();
+        lastSearchParameter = values.Search;
+        return OnChange.InvokeAsync(values);
+    }
+
+    private Task ClearAsync()
+    {
+        debounceCts?.Cancel();
+        searchText = null;
+        lastSearchParameter = null;
+        return OnClear.InvokeAsync();
+    }
+
+    private static string? Value(ChangeEventArgs e) =>
+        string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value!.ToString();
+
+    public void Dispose()
+    {
+        debounceCts?.Cancel();
+        debounceCts?.Dispose();
+    }
+}

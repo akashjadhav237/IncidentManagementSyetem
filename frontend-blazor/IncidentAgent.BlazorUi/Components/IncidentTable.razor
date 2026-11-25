@@ -1,0 +1,52 @@
+@inject NavigationManager Navigation
+
+<div class="table-wrap">
+    <table class="data-table incident-table">
+        <thead>
+            <tr>
+                <th scope="col">Number</th>
+                <th scope="col">Title</th>
+                <th scope="col">Category</th>
+                <th scope="col">Service</th>
+                <th scope="col">Priority</th>
+                <th scope="col">Status</th>
+                <th scope="col">Assignee / Reporter</th>
+                <th scope="col">Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var incident in Items)
+            {
+                <tr class="clickable" tabindex="0" @onclick="() => Open(incident)" @onkeydown="e => OnKeyDown(e, incident)">
+                    <td data-label="Number">
+                        <a class="mono" href="incidents/@incident.Id" @onclick:stopPropagation="true">@incident.IncidentNumber</a>
+                    </td>
+                    <td data-label="Title" class="cell-title">@incident.Title</td>
+                    <td data-label="Category">@incident.CategoryName</td>
+                    <td data-label="Service">@incident.ServiceName</td>
+                    <td data-label="Priority"><PriorityBadge Priority="@incident.Priority" /></td>
+                    <td data-label="Status"><StatusBadge Status="@incident.Status" /></td>
+                    <td data-label="Assignee / Reporter">
+                        <div class="cell-stack">
+                            <span class="@(incident.AssignedToName is null ? "muted" : null)">@(incident.AssignedToName ?? "Unassigned")</span>
+                            <span class="muted small">Reported by @incident.ReporterName</span>
+                        </div>
+                    </td>
+                    <td data-label="Created">@Display.LocalTime(incident.CreatedAtUtc)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<IncidentListItem> Items { get; set; } = [];
+
+    private void Open(IncidentListItem incident) => Navigation.NavigateTo($"incidents/{incident.Id}");
+
+    private void OnKeyDown(KeyboardEventArgs e, IncidentListItem incident)
+    {
+        if (e.Key is "Enter" or " ")
+            Open(incident);
+    }
+}

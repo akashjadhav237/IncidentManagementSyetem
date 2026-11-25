@@ -1,0 +1,7 @@
+<span class="badge status-badge @Display.StatusCss(Status)">
+    <span class="badge-dot" aria-hidden="true"></span>@Status
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string? Status { get; set; }
+}

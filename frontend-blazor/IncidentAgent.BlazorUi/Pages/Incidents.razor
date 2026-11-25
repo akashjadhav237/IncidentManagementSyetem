@@ -1,0 +1,144 @@
+@page "/incidents"
+@inherits OwningComponentBase<IncidentApiService>
+@inject NavigationManager Navigation
+@inject RefreshNotifier Refresh
+
+<PageTitle>All Incidents · IncidentAgent</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>All Incidents</h1>
+        <p class="muted">Search, filter and open incidents.</p>
+    </div>
+</div>
+
+<section class="card">
+    <IncidentFilters Search="@query.Search" Status="@query.Status" Priority="@query.Priority" CategoryId="query.CategoryId"
+                     Categories="categories" OnChange="ApplyFiltersAsync" OnClear="ClearFilters" />
+
+    @if (loading)
+    {
+        <StateMessage Kind="StateKind.Loading" Message="Loading incidents…" />
+    }
+    else if (error is not null)
+    {
+        <StateMessage Kind="StateKind.Error" Message="@error" OnRetry="LoadAsync" />
+    }
+    else if (result is null || result.Items.Count == 0)
+    {
+        <StateMessage Kind="StateKind.Empty" Message="@(HasFilters ? "No incidents match these filters." : "No incidents have been reported yet.")">
+            @if (HasFilters)
+            {
+                <button type="button" class="button button-secondary" @onclick="ClearFilters">Clear filters</button>
+            }
+        </StateMessage>
+    }
+    else
+    {
+        <IncidentTable Items="result.Items" />
+    }
+
+    @if (result is not null && error is null && result.TotalCount > 0)
+    {
+        <Pager Page="query.Page" PageSize="query.PageSize" TotalCount="result.TotalCount"
+               OnPageChange="GoToPage" OnPageSizeChange="ChangePageSize" />
+    }
+</section>
+
+@code {
+    [SupplyParameterFromQuery] public string? Search { get; set; }
+    [SupplyParameterFromQuery] public string? Status { get; set; }
+    [SupplyParameterFromQuery] public string? Priority { get; set; }
+    [SupplyParameterFromQuery] public Guid? CategoryId { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageNumber { get; set; }
+    [SupplyParameterFromQuery] public int? PageSize { get; set; }
+
+    private IncidentQuery query = new();
+    private PagedResult<IncidentListItem>? result;
+    private IReadOnlyList<Category> categories = [];
+    private bool loading = true;
+    private string? error;
+    private CancellationTokenSource? loadCts;
+
+    private bool HasFilters => query.Search is not null || query.Status is not null || query.Priority is not null || query.CategoryId is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Refresh.RefreshRequested += OnRefreshRequested;
+        // Categories only fill the filter dropdown; if they fail, the list still works.
+        var categoryResult = await Service.GetCategoriesAsync();
+        categories = categoryResult.Data ?? [];
+    }
+
+    protected override Task OnParametersSetAsync()
+    {
+        // The URL query string is the source of truth for filters and paging.
+        query = new IncidentQuery
+        {
+            Search = string.IsNullOrWhiteSpace(Search) ? null : Search.Trim(),
+            Status = Display.Statuses.Contains(Status) ? Status : null,
+            Priority = Display.Priorities.Contains(Priority) ? Priority : null,
+            CategoryId = CategoryId,
+            Page = PageNumber is > 0 ? PageNumber.Value : 1,
+            PageSize = PageSize is { } size && IncidentQuery.PageSizes.Contains(size) ? size : IncidentQuery.DefaultPageSize
+        };
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        // Cancel a slower request that is still running for older filters.
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+        loadCts = new CancellationTokenSource();
+
+        loading = true;
+        error = null;
+        var response = await Service.GetIncidentsAsync(query, loadCts.Token);
+        if (response.IsCancelled) return;
+
+        result = response.Data;
+        error = response.Error;
+        loading = false;
+    }
+
+    private void ApplyFiltersAsync(IncidentFilterValues values) =>
+        NavigateTo(query with { Search = values.Search, Status = values.Status, Priority = values.Priority, CategoryId = values.CategoryId, Page = 1 });
+
+    private void ClearFilters() => NavigateTo(new IncidentQuery { PageSize = query.PageSize });
+
+    private void GoToPage(int page) => NavigateTo(query with { Page = page });
+
+    private void ChangePageSize(int size) => NavigateTo(query with { PageSize = size, Page = 1 });
+
+    private void NavigateTo(IncidentQuery next)
+    {
+        var uri = Navigation.GetUriWithQueryParameters(Navigation.ToAbsoluteUri("incidents").ToString(), new Dictionary<string, object?>
+        {
+            ["search"] = next.Search,
+            ["status"] = next.Status,
+            ["priority"] = next.Priority,
+            ["categoryId"] = next.CategoryId,
+            ["page"] = next.Page > 1 ? next.Page : null,
+            ["pageSize"] = next.PageSize != IncidentQuery.DefaultPageSize ? next.PageSize : null
+        });
+        Navigation.NavigateTo(uri);
+    }
+
+    private void OnRefreshRequested() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            Refresh.RefreshRequested -= OnRefreshRequested;
+            loadCts?.Cancel();
+            loadCts?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+}

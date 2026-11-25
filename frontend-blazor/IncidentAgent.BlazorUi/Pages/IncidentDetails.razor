@@ -1,0 +1,174 @@
+@page "/incidents/{Id:guid}"
+@inherits OwningComponentBase<IncidentApiService>
+@inject RefreshNotifier Refresh
+
+<PageTitle>@(incident?.IncidentNumber ?? "Incident") · IncidentAgent</PageTitle>
+
+<a class="back-link" href="incidents">@Icons.ArrowLeft <span>Back to incidents</span></a>
+
+@if (loading)
+{
+    <div class="card"><StateMessage Kind="StateKind.Loading" Message="Loading incident…" /></div>
+}
+else if (notFound)
+{
+    <div class="card">
+        <StateMessage Kind="StateKind.Empty" Message="@error">
+            <a class="button button-secondary" href="incidents">Go to all incidents</a>
+        </StateMessage>
+    </div>
+}
+else if (error is not null || incident is null)
+{
+    <div class="card"><StateMessage Kind="StateKind.Error" Message="@(error ?? "Could not load the incident.")" OnRetry="LoadAsync" /></div>
+}
+else
+{
+    <div class="details-header">
+        <div>
+            <span class="mono muted">@incident.IncidentNumber</span>
+            <h1>@incident.Title</h1>
+        </div>
+        <div class="details-badges">
+            <PriorityBadge Priority="@incident.Priority" />
+            <StatusBadge Status="@incident.Status" />
+        </div>
+    </div>
+
+    <div class="details-grid">
+        <section class="card" aria-labelledby="description-heading">
+            <h2 id="description-heading">Description</h2>
+            <p class="description">@incident.Description</p>
+        </section>
+
+        <section class="card" aria-labelledby="fields-heading">
+            <h2 id="fields-heading">Details</h2>
+            <dl class="field-list">
+                <dt>Category</dt><dd>@incident.Category.Name</dd>
+                <dt>Service</dt><dd>@incident.Service.Name</dd>
+                <dt>Reporter</dt><dd>@incident.Reporter.FullName</dd>
+                <dt>Assignee</dt><dd>@(incident.AssignedTo?.FullName ?? "Unassigned")</dd>
+                <dt>Created</dt><dd>@Display.LocalTime(incident.CreatedAtUtc)</dd>
+                <dt>Last updated</dt><dd>@Display.LocalTime(incident.UpdatedAtUtc)</dd>
+                <dt>Resolved</dt><dd>@Display.LocalTime(incident.ResolvedAtUtc)</dd>
+                <dt>Closed</dt><dd>@Display.LocalTime(incident.ClosedAtUtc)</dd>
+            </dl>
+        </section>
+    </div>
+
+    <div class="details-grid">
+        <section class="card" aria-labelledby="comments-heading">
+            <h2 id="comments-heading">Comments (@incident.Comments.Count)</h2>
+            @if (incident.Comments.Count == 0)
+            {
+                <StateMessage Kind="StateKind.Empty" Message="No comments yet." />
+            }
+            else
+            {
+                <ul class="comment-list">
+                    @foreach (var comment in incident.Comments)
+                    {
+                        <li class="comment">
+                            <div class="comment-meta">
+                                <strong>@(comment.AuthorName ?? "Unknown user")</strong>
+                                <time class="muted small">@Display.LocalTime(comment.CreatedAtUtc)</time>
+                            </div>
+                            <p>@comment.Text</p>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
+        <section class="card" aria-labelledby="history-heading">
+            <h2 id="history-heading">History</h2>
+            @if (historyError is not null)
+            {
+                <StateMessage Kind="StateKind.Error" Message="@historyError" OnRetry="LoadAsync" />
+            }
+            else if (history.Count == 0)
+            {
+                <StateMessage Kind="StateKind.Empty" Message="No history recorded." />
+            }
+            else
+            {
+                <ol class="timeline">
+                    @foreach (var entry in history)
+                    {
+                        <li class="timeline-item">
+                            <span class="timeline-dot" aria-hidden="true"></span>
+                            <div class="timeline-body">
+                                <div class="timeline-title">
+                                    <strong>@Display.HistoryTitle(entry)</strong>
+                                    @if (entry.Action == "Created")
+                                    {
+                                        <span> as @entry.NewValue</span>
+                                    }
+                                    else
+                                    {
+                                        <span>: @Display.HistoryValue(entry, entry.OldValue) → @Display.HistoryValue(entry, entry.NewValue)</span>
+                                    }
+                                </div>
+                                <div class="muted small">@(entry.ActorName ?? "System") · @Display.LocalTime(entry.ChangedAtUtc)</div>
+                                @if (!string.IsNullOrWhiteSpace(entry.Note))
+                                {
+                                    <p class="timeline-note">@entry.Note</p>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ol>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private IncidentDetail? incident;
+    private IReadOnlyList<IncidentHistoryEntry> history = [];
+    private bool loading = true;
+    private bool notFound;
+    private string? error;
+    private string? historyError;
+
+    protected override void OnInitialized() => Refresh.RefreshRequested += OnRefreshRequested;
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        notFound = false;
+        error = null;
+        historyError = null;
+
+        var detailsTask = Service.GetIncidentAsync(Id);
+        var historyTask = Service.GetHistoryAsync(Id);
+        await Task.WhenAll(detailsTask, historyTask);
+
+        var details = detailsTask.Result;
+        var historyResult = historyTask.Result;
+        if (details.IsCancelled || historyResult.IsCancelled) return;
+
+        incident = details.Data;
+        error = details.Error;
+        notFound = details.IsNotFound;
+        history = historyResult.Data ?? [];
+        historyError = historyResult.IsNotFound ? null : historyResult.Error;
+        loading = false;
+    }
+
+    private void OnRefreshRequested() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) Refresh.RefreshRequested -= OnRefreshRequested;
+        base.Dispose(disposing);
+    }
+}

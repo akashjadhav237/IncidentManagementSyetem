@@ -1,0 +1,7 @@
+<span class="badge priority-badge @Display.PriorityCss(Priority)">
+    <span class="badge-mark" aria-hidden="true"></span>@Display.PriorityLabel(Priority)
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string? Priority { get; set; }
+}

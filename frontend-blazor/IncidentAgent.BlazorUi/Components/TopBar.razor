@@ -1,0 +1,52 @@
+@inject NavigationManager Navigation
+@inject RefreshNotifier Refresh
+
+<header class="topbar">
+    <button type="button" class="icon-button menu-toggle" @onclick="OnMenuClick" aria-label="Open navigation">@Icons.Menu</button>
+
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+        <ol>
+            @for (var i = 0; i < Crumbs.Count; i++)
+            {
+                var crumb = Crumbs[i];
+                var isLast = i == Crumbs.Count - 1;
+                <li>
+                    @if (crumb.Href is not null && !isLast)
+                    {
+                        <a href="@crumb.Href">@crumb.Label</a>
+                    }
+                    else
+                    {
+                        <span aria-current="@(isLast ? "page" : null)">@crumb.Label</span>
+                    }
+                </li>
+            }
+        </ol>
+    </nav>
+
+    <form class="topbar-search" role="search" @onsubmit="SearchAsync">
+        <label for="global-search" class="visually-hidden">Search incidents</label>
+        @Icons.Search
+        <input id="global-search" type="search" placeholder="Search incidents…" autocomplete="off" @bind="searchText" />
+    </form>
+
+    <button type="button" class="button button-secondary" @onclick="Refresh.RequestRefresh" title="Reload data">
+        @Icons.Refresh<span class="button-label">Refresh</span>
+    </button>
+
+    <div class="avatar" role="img" aria-label="User avatar placeholder" title="Not signed in (authentication not implemented)">AU</div>
+</header>
+
+@code {
+    [Parameter] public IReadOnlyList<Crumb> Crumbs { get; set; } = [];
+    [Parameter] public EventCallback OnMenuClick { get; set; }
+
+    private string? searchText;
+
+    private void SearchAsync()
+    {
+        var term = searchText?.Trim();
+        Navigation.NavigateTo(string.IsNullOrEmpty(term) ? "incidents" : $"incidents?search={Uri.EscapeDataString(term)}");
+        searchText = null;
+    }
+}

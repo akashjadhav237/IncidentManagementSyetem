@@ -1,0 +1,33 @@
+@if (Href is null)
+{
+    <div class="summary-card accent-@Accent">@Body()</div>
+}
+else
+{
+    <a class="summary-card summary-card-link accent-@Accent" href="@Href">@Body()</a>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public int? Value { get; set; }
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public string Accent { get; set; } = "primary";
+    [Parameter] public string? Href { get; set; }
+
+    private RenderFragment Body() => __builder =>
+    {
+        <span class="summary-label">@Label</span>
+        @if (Value is null)
+        {
+            <span class="summary-value summary-value-loading" aria-label="Loading">—</span>
+        }
+        else
+        {
+            <span class="summary-value">@Value</span>
+        }
+        @if (Hint is not null)
+        {
+            <span class="summary-hint">@Hint</span>
+        }
+    };
+}
