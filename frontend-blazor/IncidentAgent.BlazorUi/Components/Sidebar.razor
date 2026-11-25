@@ -1,0 +1,39 @@
+<aside class="sidebar @(Collapsed ? "collapsed" : null) @(MobileOpen ? "mobile-open" : null)" aria-label="Main navigation">
+    <div class="sidebar-brand">
+        <span class="brand-mark">@Icons.Logo</span>
+        <span class="brand-text">IncidentAgent</span>
+    </div>
+
+    <nav class="sidebar-nav">
+        <NavLink class="nav-item" href="" Match="NavLinkMatch.All" title="Dashboard">
+            @Icons.Dashboard<span class="nav-label">Dashboard</span>
+        </NavLink>
+        <NavLink class="nav-item" href="incidents" title="All Incidents">
+            @Icons.Incidents<span class="nav-label">All Incidents</span>
+        </NavLink>
+        <span class="nav-item disabled" aria-disabled="true" title="My Incidents (needs authentication)">
+            @Icons.User
+            <span class="nav-label">My Incidents <small>needs authentication</small></span>
+        </span>
+        <NavLink class="nav-item" href="categories" title="Categories">
+            @Icons.Tag<span class="nav-label">Categories</span>
+        </NavLink>
+        <NavLink class="nav-item" href="services" title="Application Services">
+            @Icons.Server<span class="nav-label">Application Services</span>
+        </NavLink>
+        <NavLink class="nav-item" href="settings" title="Settings">
+            @Icons.Settings<span class="nav-label">Settings</span>
+        </NavLink>
+    </nav>
+
+    <button type="button" class="sidebar-collapse" @onclick="OnToggleCollapse"
+            aria-label="@(Collapsed ? "Expand sidebar" : "Collapse sidebar")" aria-expanded="@(!Collapsed)">
+        @(Collapsed ? Icons.ChevronRight : Icons.ChevronLeft)<span class="nav-label">Collapse</span>
+    </button>
+</aside>
+
+@code {
+    [Parameter] public bool Collapsed { get; set; }
+    [Parameter] public bool MobileOpen { get; set; }
+    [Parameter] public EventCallback OnToggleCollapse { get; set; }
+}

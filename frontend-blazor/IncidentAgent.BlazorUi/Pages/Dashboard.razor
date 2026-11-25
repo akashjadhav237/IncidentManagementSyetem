@@ -1,0 +1,121 @@
+@page "/"
+@inherits OwningComponentBase<IncidentApiService>
+@inject RefreshNotifier Refresh
+
+<PageTitle>Dashboard · IncidentAgent</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="muted">Overview of all incidents.</p>
+    </div>
+</div>
+
+@if (countsError is not null)
+{
+    <div class="card">
+        <StateMessage Kind="StateKind.Error" Message="@countsError" OnRetry="LoadAsync" />
+    </div>
+}
+else
+{
+    <section class="kpi-grid" aria-label="Incident totals">
+        <SummaryCard Label="Total incidents" Value="counts?.Total" Accent="primary" Href="incidents" />
+        <SummaryCard Label="Open" Value="counts?.Open" Accent="open" Href="incidents?status=Open" />
+        <SummaryCard Label="In progress" Value="counts?.InProgress" Accent="progress" Hint="Assigned + Investigating" />
+        <SummaryCard Label="Critical (P1)" Value="counts?.Critical" Accent="p1" Href="incidents?priority=P1Critical" />
+        <SummaryCard Label="Resolved" Value="counts?.Resolved" Accent="resolved" Href="incidents?status=Resolved" />
+    </section>
+
+    <section class="card" aria-labelledby="priority-heading">
+        <h2 id="priority-heading">By priority</h2>
+        <div class="priority-row">
+            @foreach (var (priority, count) in PriorityCounts())
+            {
+                <a class="priority-tile @Display.PriorityCss(priority)" href="incidents?priority=@priority">
+                    <PriorityBadge Priority="@priority" />
+                    <span class="priority-count">@(count?.ToString() ?? "—")</span>
+                </a>
+            }
+        </div>
+    </section>
+}
+
+<section class="card" aria-labelledby="latest-heading">
+    <div class="card-header">
+        <h2 id="latest-heading">Latest incidents</h2>
+        <a href="incidents">View all</a>
+    </div>
+
+    @if (latestLoading)
+    {
+        <StateMessage Kind="StateKind.Loading" Message="Loading latest incidents…" />
+    }
+    else if (latestError is not null)
+    {
+        <StateMessage Kind="StateKind.Error" Message="@latestError" OnRetry="LoadAsync" />
+    }
+    else if (latest.Count == 0)
+    {
+        <StateMessage Kind="StateKind.Empty" Message="No incidents have been reported yet." />
+    }
+    else
+    {
+        <IncidentTable Items="latest" />
+    }
+</section>
+
+@code {
+    private DashboardCounts? counts;
+    private string? countsError;
+    private IReadOnlyList<IncidentListItem> latest = [];
+    private bool latestLoading = true;
+    private string? latestError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Refresh.RefreshRequested += OnRefreshRequested;
+        await LoadAsync();
+    }
+
+    private Task LoadAsync() => Task.WhenAll(LoadCountsAsync(), LoadLatestAsync());
+
+    private async Task LoadCountsAsync()
+    {
+        counts = null;
+        countsError = null;
+        var result = await Service.GetDashboardCountsAsync();
+        if (result.IsCancelled) return;
+        counts = result.Data;
+        countsError = result.Error;
+        StateHasChanged();
+    }
+
+    private async Task LoadLatestAsync()
+    {
+        latestLoading = true;
+        latestError = null;
+        var result = await Service.GetIncidentsAsync(new IncidentQuery { PageSize = 10 });
+        if (result.IsCancelled) return;
+        latest = result.Data?.Items ?? [];
+        latestError = result.Error;
+        latestLoading = false;
+        StateHasChanged();
+    }
+
+    private IEnumerable<(string Priority, int? Count)> PriorityCounts() =>
+    [
+        ("P1Critical", counts?.P1),
+        ("P2High", counts?.P2),
+        ("P3Medium", counts?.P3),
+        ("P4Low", counts?.P4)
+    ];
+
+    private void OnRefreshRequested() => _ = InvokeAsync(LoadAsync);
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) Refresh.RefreshRequested -= OnRefreshRequested;
+        base.Dispose(disposing);
+    }
+}

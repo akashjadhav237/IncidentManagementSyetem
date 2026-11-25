@@ -1,0 +1,82 @@
+@page "/services"
+@inherits OwningComponentBase<IncidentApiService>
+@inject RefreshNotifier Refresh
+
+<PageTitle>Application Services · IncidentAgent</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Application Services</h1>
+        <p class="muted">Applications and services that incidents are raised against (read-only).</p>
+    </div>
+</div>
+
+<section class="card">
+    @if (loading)
+    {
+        <StateMessage Kind="StateKind.Loading" Message="Loading services…" />
+    }
+    else if (error is not null)
+    {
+        <StateMessage Kind="StateKind.Error" Message="@error" OnRetry="LoadAsync" />
+    }
+    else if (items.Count == 0)
+    {
+        <StateMessage Kind="StateKind.Empty" Message="No services found." />
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="data-table compact-table">
+                <thead>
+                    <tr><th scope="col">Name</th><th scope="col">Owner team</th><th scope="col">Description</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var service in items)
+                    {
+                        <tr>
+                            <td data-label="Name"><strong>@service.Name</strong></td>
+                            <td data-label="Owner team">@(service.OwnerTeam ?? "—")</td>
+                            <td data-label="Description">@(service.Description ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<ApplicationServiceItem> items = [];
+    private bool loading = true;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Refresh.RefreshRequested += OnRefreshRequested;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        error = null;
+        var result = await Service.GetServicesAsync();
+        if (result.IsCancelled) return;
+        items = result.Data ?? [];
+        error = result.Error;
+        loading = false;
+    }
+
+    private void OnRefreshRequested() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) Refresh.RefreshRequested -= OnRefreshRequested;
+        base.Dispose(disposing);
+    }
+}

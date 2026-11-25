@@ -1,0 +1,131 @@
+### IncidentAgent API smoke test
+### Run top to bottom in Rider (HTTP Client). Requires the API running in Development (seed data present).
+@baseUrl = http://localhost:5080
+@adminId = a9c4e8b3-1d7f-4a2c-b5e9-3c4d5e6f7a03
+@priyaId = a9c4e8b3-1d7f-4a2c-b5e9-3c4d5e6f7a04
+@categoryId = 3f1a7c52-9b1e-4d6a-8c3e-1a2b3c4d5e01
+@serviceId = 7d2e9a10-4c5b-4f8a-9e6d-2b3c4d5e6f02
+@otherServiceId = 7d2e9a10-4c5b-4f8a-9e6d-2b3c4d5e6f03
+
+### Health (no DB)
+GET {{baseUrl}}/health
+
+### Readiness (checks PostgreSQL)
+GET {{baseUrl}}/health/ready
+
+### Hello
+GET {{baseUrl}}/api/hello
+
+### Reference data
+GET {{baseUrl}}/api/categories
+
+###
+GET {{baseUrl}}/api/services
+
+###
+GET {{baseUrl}}/api/users
+
+### 1. Create incident -> 201 + Location
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Smoke test: checkout timeout",
+  "description": "Checkout requests time out after 30 seconds.",
+  "priority": "P2High",
+  "categoryId": "{{categoryId}}",
+  "serviceId": "{{serviceId}}",
+  "reporterId": "{{adminId}}"
+}
+
+> {% client.global.set("incidentId", response.body.id); %}
+
+### 2. List with paging
+GET {{baseUrl}}/api/incidents?page=1&pageSize=5
+
+### 3. List with filters + search (case-insensitive)
+GET {{baseUrl}}/api/incidents?status=Open&priority=P2High&serviceId={{serviceId}}&search=SMOKE
+
+### 4. Get by id
+GET {{baseUrl}}/api/incidents/{{incidentId}}
+
+### 5. Update (priority + service change -> history rows)
+PUT {{baseUrl}}/api/incidents/{{incidentId}}
+Content-Type: application/json
+
+{
+  "title": "Smoke test: checkout timeout (updated)",
+  "description": "Checkout requests time out after 30 seconds for card payments.",
+  "priority": "P1Critical",
+  "categoryId": "{{categoryId}}",
+  "serviceId": "{{otherServiceId}}",
+  "actorUserId": "{{adminId}}"
+}
+
+### 6. Assign (Open -> Assigned)
+POST {{baseUrl}}/api/incidents/{{incidentId}}/assign
+Content-Type: application/json
+
+{ "assigneeId": "{{priyaId}}", "actorUserId": "{{adminId}}" }
+
+### 7. Valid status change: Assigned -> Investigating -> 200
+POST {{baseUrl}}/api/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{ "newStatus": "Investigating", "actorUserId": "{{priyaId}}", "note": "Checking gateway logs" }
+
+### 8. Invalid status change: Investigating -> Closed -> 409
+POST {{baseUrl}}/api/incidents/{{incidentId}}/status
+Content-Type: application/json
+
+{ "newStatus": "Closed", "actorUserId": "{{priyaId}}" }
+
+### 9. Add comment -> 201
+POST {{baseUrl}}/api/incidents/{{incidentId}}/comments
+Content-Type: application/json
+
+{ "text": "Gateway timeout raised from 30s to 60s as a mitigation.", "actorUserId": "{{priyaId}}" }
+
+### 10. History (oldest first)
+GET {{baseUrl}}/api/incidents/{{incidentId}}/history
+
+### 11. Invalid body -> 400 ValidationProblem
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "",
+  "priority": "P2High",
+  "categoryId": "00000000-0000-0000-0000-000000000001",
+  "serviceId": "{{serviceId}}",
+  "reporterId": "{{adminId}}"
+}
+
+### 12. Unknown id -> 404
+GET {{baseUrl}}/api/incidents/00000000-0000-0000-0000-000000000000
+
+### 13a. Concurrent create A (run 13a and 13b together; numbers must differ)
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Smoke test: concurrent A",
+  "description": "Concurrency check A.",
+  "priority": "P4Low",
+  "categoryId": "{{categoryId}}",
+  "serviceId": "{{serviceId}}",
+  "reporterId": "{{adminId}}"
+}
+
+### 13b. Concurrent create B
+POST {{baseUrl}}/api/incidents
+Content-Type: application/json
+
+{
+  "title": "Smoke test: concurrent B",
+  "description": "Concurrency check B.",
+  "priority": "P4Low",
+  "categoryId": "{{categoryId}}",
+  "serviceId": "{{serviceId}}",
+  "reporterId": "{{adminId}}"
+}

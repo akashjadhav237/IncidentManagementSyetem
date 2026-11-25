@@ -1,0 +1,37 @@
+<div class="pager">
+    <div class="pager-size">
+        <label for="pager-size">Rows per page</label>
+        <select id="pager-size" value="@PageSize" @onchange="ChangePageSize">
+            @foreach (var size in IncidentQuery.PageSizes)
+            {
+                <option value="@size">@size</option>
+            }
+        </select>
+    </div>
+
+    <span class="pager-range" aria-live="polite">@From–@To of @TotalCount</span>
+
+    <div class="pager-buttons">
+        <button type="button" class="button button-secondary" disabled="@(Page <= 1)" @onclick="() => OnPageChange.InvokeAsync(Page - 1)">
+            @Icons.ChevronLeft <span>Previous</span>
+        </button>
+        <button type="button" class="button button-secondary" disabled="@(Page >= TotalPages)" @onclick="() => OnPageChange.InvokeAsync(Page + 1)">
+            <span>Next</span> @Icons.ChevronRight
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public int Page { get; set; }
+    [Parameter, EditorRequired] public int PageSize { get; set; }
+    [Parameter, EditorRequired] public int TotalCount { get; set; }
+    [Parameter] public EventCallback<int> OnPageChange { get; set; }
+    [Parameter] public EventCallback<int> OnPageSizeChange { get; set; }
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
+    private int From => TotalCount == 0 ? 0 : Math.Min((Page - 1) * PageSize + 1, TotalCount);
+    private int To => Math.Min(Page * PageSize, TotalCount);
+
+    private Task ChangePageSize(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), out var size) ? OnPageSizeChange.InvokeAsync(size) : Task.CompletedTask;
+}
